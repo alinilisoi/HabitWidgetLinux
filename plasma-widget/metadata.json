@@ -1,0 +1,14 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "io.github.weeklytodowidget",
+    "Name": "Weekly Todo",
+    "Description": "Today’s activities from Weekly Todo",
+    "Icon": "view-calendar-tasks",
+    "Version": "0.1.0",
+    "License": "MIT",
+    "Category": "Utilities",
+    "EnabledByDefault": false
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

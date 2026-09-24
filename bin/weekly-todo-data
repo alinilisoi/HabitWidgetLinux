@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+set -eu
+
+script_path=$(readlink -f "$0")
+app_root=$(CDPATH= cd -- "$(dirname -- "$script_path")/.." && pwd)
+export PYTHONPATH="$app_root/src${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m todo_widget.bridge "$@"

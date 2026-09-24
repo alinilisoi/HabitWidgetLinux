@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Weekly Todo
+Comment=Plan a weekly todo list from reusable templates
+Exec=weekly-todo
+Icon=io.github.weeklytodowidget
+Terminal=false
+Categories=Office;Utility;GTK;
+StartupNotify=true

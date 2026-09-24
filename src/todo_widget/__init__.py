@@ -1,0 +1,1 @@
+"""Weekly Todo Widget."""
