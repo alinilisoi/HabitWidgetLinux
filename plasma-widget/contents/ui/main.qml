@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQml.Models
 import org.kde.plasma.plasmoid
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.kirigami as Kirigami
@@ -10,7 +11,7 @@ PlasmoidItem {
     preferredRepresentation: fullRepresentation
     Plasmoid.icon: "view-calendar-tasks"
     Plasmoid.title: "Weekly Todo"
-    property var state: ({ hasPlan: false, items: [], activities: [], completions: {}, days: [], progress: 0, locked: true })
+    property var state: ({ hasPlan: false, items: [], activities: [], completions: {}, days: [], progress: 0, locked: true, templates: [], templateId: null })
     property string selectedDate: ""
 
     function colorFor(progress) {
@@ -33,6 +34,31 @@ PlasmoidItem {
     function selectDay(day) { execute("weekly-todo-data day " + day) }
     function toggle(activityId) { execute("weekly-todo-data toggle " + activityId) }
     function changeLock() { execute("weekly-todo-data lock " + (root.state.locked ? "off" : "on")) }
+    function applyTemplate(templateId) {
+        const week = root.state.weekStart ? " " + root.state.weekStart : ""
+        execute("weekly-todo-data apply " + templateId + week)
+    }
+    function quoteArg(value) {
+        return "'" + String(value).replace(/'/g, "'\\''") + "'"
+    }
+    function createTemplate(name, activities) {
+        const payload = JSON.stringify({
+            name: name,
+            activities: activities,
+            weekStart: root.state.weekStart || "",
+            apply: !root.state.hasPlan
+        })
+        execute("weekly-todo-data create " + quoteArg(payload))
+    }
+    function currentTemplateName() {
+        const templates = root.state.templates || []
+        const selected = templates.find((item) => item.id === root.state.templateId)
+        if (selected)
+            return selected.name
+        if (templates.length === 0)
+            return "New template"
+        return "Choose template"
+    }
 
     Plasma5Support.DataSource {
         id: executable
@@ -68,6 +94,38 @@ PlasmoidItem {
                     icon.name: root.state.locked ? "changes-prevent" : "changes-allow"
                     onClicked: root.changeLock()
                     Accessible.name: root.state.locked ? "Unlock editing" : "Lock editing"
+                }
+                ToolButton {
+                    visible: !root.state.locked
+                    icon.name: "view-list-details"
+                    text: root.currentTemplateName()
+                    display: AbstractButton.TextBesideIcon
+                    Accessible.name: "Change template"
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Change or create a template"
+                    onClicked: templateMenu.popup()
+
+                    Menu {
+                        id: templateMenu
+                        MenuItem {
+                            text: "New template…"
+                            icon.name: "list-add"
+                            onTriggered: newTemplateDialog.open()
+                        }
+                        MenuSeparator {}
+                        Instantiator {
+                            model: root.state.templates || []
+                            delegate: MenuItem {
+                                required property var modelData
+                                text: modelData.name + "  ·  " + modelData.activityCount
+                                checkable: true
+                                checked: modelData.id === root.state.templateId
+                                onTriggered: root.applyTemplate(modelData.id)
+                            }
+                            onObjectAdded: (index, object) => templateMenu.insertItem(index + 2, object)
+                            onObjectRemoved: (_index, object) => templateMenu.removeItem(object)
+                        }
+                    }
                 }
             }
 
@@ -110,7 +168,14 @@ PlasmoidItem {
                 Rectangle { width: parent.width * root.state.progress; height: parent.height; radius: height / 2; color: root.colorFor(root.state.progress) }
             }
 
-            Label { visible: !root.state.hasPlan; text: "Open Weekly Todo to plan this week."; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            Label {
+                visible: !root.state.hasPlan
+                text: root.state.locked
+                    ? "Unlock to choose a template, or open Weekly Todo to plan this week."
+                    : "Choose a template, or create a new one from the template button."
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
 
             ListView {
                 visible: root.state.hasPlan
@@ -133,7 +198,81 @@ PlasmoidItem {
 
             Label { id: errorLabel; visible: text.length > 0; color: Kirigami.Theme.negativeTextColor; wrapMode: Text.WordWrap; Layout.fillWidth: true }
         }
+
+        Dialog {
+            id: newTemplateDialog
+            title: "New template"
+            modal: true
+            anchors.centerIn: parent
+            width: Math.min(parent.width - Kirigami.Units.largeSpacing, Kirigami.Units.gridUnit * 20)
+            standardButtons: Dialog.Cancel | Dialog.Ok
+            onOpened: {
+                templateNameField.text = ""
+                activityTitleField.text = ""
+                draftActivities.clear()
+                templateNameField.forceActiveFocus()
+            }
+            onAccepted: {
+                const titles = []
+                for (let index = 0; index < draftActivities.count; index++)
+                    titles.push(draftActivities.get(index).title)
+                root.createTemplate(templateNameField.text, titles)
+            }
+
+            ColumnLayout {
+                width: newTemplateDialog.availableWidth
+                spacing: Kirigami.Units.smallSpacing
+
+                Label { text: "Template name"; Layout.fillWidth: true }
+                TextField {
+                    id: templateNameField
+                    placeholderText: "Morning"
+                    Layout.fillWidth: true
+                    Accessible.name: "Template name"
+                    onAccepted: activityTitleField.forceActiveFocus()
+                }
+
+                Label { text: "Activities"; Layout.fillWidth: true }
+                Repeater {
+                    model: draftActivities
+                    delegate: RowLayout {
+                        required property int index
+                        required property string title
+                        Layout.fillWidth: true
+                        Label { text: title; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                        ToolButton {
+                            icon.name: "user-trash-symbolic"
+                            Accessible.name: "Remove " + title
+                            onClicked: draftActivities.remove(index)
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    TextField {
+                        id: activityTitleField
+                        placeholderText: "New activity"
+                        Layout.fillWidth: true
+                        Accessible.name: "New activity"
+                        onAccepted: addDraftActivity.click()
+                    }
+                    Button {
+                        id: addDraftActivity
+                        text: "Add"
+                        onClicked: {
+                            const title = activityTitleField.text.trim()
+                            if (!title)
+                                return
+                            draftActivities.append({ title: title })
+                            activityTitleField.text = ""
+                            activityTitleField.forceActiveFocus()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Timer { interval: 30000; repeat: true; running: true; triggeredOnStart: true; onTriggered: root.refresh() }
+    ListModel { id: draftActivities }
 }
