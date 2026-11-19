@@ -5,7 +5,7 @@
     "Name": "Weekly Todo",
     "Description": "Today’s activities from Weekly Todo",
     "Icon": "view-calendar-tasks",
-    "Version": "0.1.0",
+    "Version": "1.0.0",
     "License": "MIT",
     "Category": "Utilities",
     "EnabledByDefault": false
